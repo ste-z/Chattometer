@@ -42,10 +42,10 @@ function ensureBadgeExists() {
 
 // FIXME: use different logic for different URL (different chat platforms)
 async function findAndLogResponses() {
+    console.log("findAndLogResponses triggered."); // Log function start
     // --- Try to find or create and insert the badge ---
     if (!ensureBadgeExists()) {
-        // If badge couldn't be found or created (e.g., anchor element not ready), stop here.
-        // The MutationObserver or next initialization attempt will try again.
+        console.log("Badge anchor not found in findAndLogResponses, exiting.");
         return;
     }
     // --- End badge finding/creation ---
@@ -57,9 +57,9 @@ async function findAndLogResponses() {
         return;
     }
 
-    let responses = document.querySelectorAll("div.agent-turn"); // Example selector, adjust per platform
+    let responses = document.querySelectorAll("div.agent-turn"); // TODO: adjust per platform
     // TODO: Add selectors for other platforms
-    const modelElement = document.querySelector('button[data-testid="model-switcher-dropdown-button"] span'); // Example selector
+    const modelElement = document.querySelector('button[data-testid="model-switcher-dropdown-button"] span'); // TODO
     // TODO: Add selectors for other platforms
     const modelName = modelElement ? modelElement.textContent.trim() : 'unknown'; // Get model name
 
@@ -79,6 +79,9 @@ async function findAndLogResponses() {
         nTokensCombinedText = enc.encode(combinedText).length;
         nTokensLastResponse = enc.encode(lastResponse.textContent || '').length;
 
+        // --- Log before sending ---
+        console.log(`Preparing to send to background: model='${modelName}', tokens=${nTokensCombinedText}, responses found=${responses.length}`);
+
         // --- Send message to background script ---
         // FIXME: Currently only combined impact is calculated. Also implement last response impact calculation
         if (nTokensCombinedText > 0 && modelName !== 'unknown') {
@@ -93,9 +96,15 @@ async function findAndLogResponses() {
                     tokens: nTokensCombinedText
                 },
                 (response) => {
+                    // --- Log response received ---
+                    console.log("Received response from background:", JSON.stringify(response, null, 2));
+
                     // Re-fetch the badge element inside the callback, as it might have changed
                     const currentBadge = document.getElementById(BADGE_ID);
-                    if (!currentBadge) return; // Badge disappeared
+                    if (!currentBadge) {
+                        console.log("Badge disappeared before update could happen.");
+                        return; // Badge disappeared
+                    }
 
                     // This callback runs when the background script sends a response
                     if (chrome.runtime.lastError) {
@@ -112,19 +121,22 @@ async function findAndLogResponses() {
                         updateBadge(impactData); // Pass currentBadge reference if needed, or let updateBadge find it
                     } else {
                         // Handle errors reported by the background script
-                        console.error('Error fetching impact calculation (from background):', response ? response.error : 'Unknown error');
-                        currentBadge.textContent = 'Error calculating impact'; // Show error in badge
+                        const errorMsg = response ? response.error : 'Unknown error';
+                        console.error('Error fetching impact calculation (from background):', errorMsg);
+                        currentBadge.textContent = `Error: ${errorMsg}`; // Show specific error in badge
                     }
                 }
             );
         } else if (badge) {
             // If no tokens or unknown model, clear or set default text
+            console.log(`Skipping calculation: tokens=${nTokensCombinedText}, model='${modelName}'`);
             if (!badge.textContent.startsWith('Error')) { // Don't clear error messages
                 badge.textContent = ''; // Or 'Enter text to calculate'
             }
         }
         // --- End message sending ---
     } else if (badge) {
+        console.log("No responses found (responses.length === 0). Clearing badge.");
         if (!badge.textContent.startsWith('Error')) { // Don't clear error messages
             badge.textContent = ''; // Clear badge if no responses found
         }
@@ -133,6 +145,9 @@ async function findAndLogResponses() {
 
 // --- Function to update the badge ---
 function updateBadge(impactData) {
+    // --- Log data received by updateBadge ---
+    console.log("updateBadge received data:", JSON.stringify(impactData, null, 2));
+
     // Re-check if badge exists in the DOM, as it might have been removed/recreated
     const currentBadge = document.getElementById(BADGE_ID);
     if (!currentBadge) {
@@ -143,10 +158,13 @@ function updateBadge(impactData) {
     if (impactData?.impacts?.energy_kWh?.min !== undefined && impactData?.impacts?.energy_kWh?.max !== undefined && impactData?.impacts?.gwp_kgCO2eq?.min !== undefined && impactData?.impacts?.gwp_kgCO2eq?.max !== undefined) {
         const avgEnergy = (impactData.impacts.energy_kWh.min + impactData.impacts.energy_kWh.max) / 2;
         const avgGhg = (impactData.impacts.gwp_kgCO2eq.min + impactData.impacts.gwp_kgCO2eq.max) / 2;
+        const badgeText = `Energy: ${avgEnergy.toFixed(4)} kWh<br>GHG: ${avgGhg.toFixed(4)} kgCO2eq`;
+        console.log("Setting badge innerHTML:", badgeText);
         // Use innerHTML carefully, ensure data is sanitized if it came from external source
-        currentBadge.innerHTML = `Energy: ${avgEnergy.toFixed(4)} kWh<br>GHG: ${avgGhg.toFixed(4)} kgCO2eq`;
+        currentBadge.innerHTML = badgeText;
     } else {
         // Handle cases where data structure is unexpected or calculation failed previously
+        console.log("Impact data structure invalid or missing. Setting badge text to 'Impact data unavailable'.");
         if (!currentBadge.textContent.startsWith('Error')) { // Avoid overwriting specific error messages
             currentBadge.textContent = 'Impact data unavailable';
         }
@@ -157,16 +175,39 @@ function updateBadge(impactData) {
 
 // Define the callback function that runs when mutations are observed
 const mutationCallback = function(mutationsList, obs) {
+    console.log("MutationObserver callback triggered."); // Log observer trigger
     // Check if the badge anchor still exists before running calculations
     const bottomBox = document.querySelector("div#thread-bottom-container"); // Re-check anchor
     if (bottomBox) {
-        findAndLogResponses(); // Run the main logic if the anchor is present
+        // --- Add a small delay to allow DOM to settle ---
+        setTimeout(() => {
+            // Re-check anchor inside timeout in case it disappeared during the delay
+            const currentBottomBox = document.querySelector("div#thread-bottom-container");
+            if (!currentBottomBox) {
+                console.log("Anchor disappeared during mutation callback delay.");
+                return;
+            }
+
+            console.log("Checking for responses after short delay...");
+            const responsesExist = document.querySelector("div.agent-turn");
+            if (responsesExist) {
+                console.log("Anchor and responses exist after delay, calling findAndLogResponses.");
+                findAndLogResponses(); // Run the main logic only if responses are also present
+            } else {
+                console.log("Anchor exists, but no responses found after delay. Waiting for next mutation.");
+                // Optionally, clear the badge if no responses are found after the delay
+                const currentBadge = document.getElementById(BADGE_ID);
+                if (currentBadge && !currentBadge.textContent.startsWith('Error') && !currentBadge.textContent.startsWith('Calculating')) {
+                    currentBadge.textContent = '';
+                }
+            }
+        }, 300); // Increased delay to 300 milliseconds
+
     } else {
         // If the anchor disappeared (e.g., navigating away), disconnect observer
         console.log("Badge anchor lost, disconnecting observer.");
-        obs.disconnect();
-        // Optionally, try re-initializing after a delay in case it's a temporary removal
-        // scheduleInitialization(1000);
+        if (observer) observer.disconnect(); // Ensure observer is disconnected
+        badge = null; // Clear badge reference
     }
 };
 

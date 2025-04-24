@@ -2,10 +2,22 @@
 /*!***********************************!*\
   !*** ./src/scripts/background.js ***!
   \***********************************/
-
 // Listen for messages from the content script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "calculateImpact") {
+    // --- Log request received ---
+    console.log("Background script received 'calculateImpact' request:", JSON.stringify(request, null, 2));
+
+    const requestBody = {
+        // FIXME: use different model names based on request.modelName if needed
+        model: "gpt-4o",
+        tokens: request.tokens
+    };
+
+    // --- Log request body being sent to backend ---
+    console.log("Sending request to backend:", JSON.stringify(requestBody, null, 2));
+
+
     // Perform the fetch request
     // FIXME: the current endpoint is a local Flask server running on port 5000, use actual endpoint in production
     fetch('http://127.0.0.1:5000/calculate', {
@@ -13,28 +25,31 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        // FIXME: use different model names based on request.modelName if needed
-        model: "gpt-4o", // Or use request.modelName if backend supports it
-        tokens: request.tokens
-      }),
+      body: JSON.stringify(requestBody),
     })
     .then(response => {
       if (!response.ok) {
         // If response is not ok, create an error object to send back
         return response.text().then(text => {
-          throw new Error(`HTTP error! status: ${response.status}, message: ${text}`);
+          // --- Log backend error response ---
+          console.error(`Backend responded with error: ${response.status}`, text);
+          throw new Error(`Backend Error: ${response.status} - ${text}`); // More informative error
         });
       }
       return response.json(); // Parse JSON if response is ok
     })
     .then(data => {
+      // --- Log successful data from backend ---
+      console.log("Received successful data from backend:", JSON.stringify(data, null, 2));
       // Send the successful data back to the content script
+      console.log("Sending success response to content script.");
       sendResponse({ success: true, data: data });
     })
     .catch(error => {
-      console.error('Error fetching impact calculation in background:', error);
+      // --- Log fetch/processing error ---
+      console.error('Error during fetch or processing in background:', error);
       // Send an error object back to the content script
+      console.log("Sending error response to content script.");
       sendResponse({ success: false, error: error.message });
     });
 
@@ -43,7 +58,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-console.log("Chattometer background script loaded.");
+console.log("Chattometer background script loaded");
 
 /******/ })()
 ;
