@@ -45,7 +45,6 @@ async function findAndLogResponses() {
     let lastResponse = null;
     let nTokensCombinedText = 0;
     let nTokensLastResponse = 0;
-    let impactData = null;
 
     if (responses.length > 0) {
         textArray = Array.from(responses).map(element => element.textContent || '');
@@ -54,51 +53,68 @@ async function findAndLogResponses() {
         nTokensCombinedText = enc.encode(combinedText).length;
         nTokensLastResponse  = enc.encode(lastResponse.textContent || '').length;
 
-        // --- Call the backend ---
+        // --- Send message to background script ---
         // FIXME: Currently only combined impact is calculated. Also implement last response impact calculation
         if (nTokensCombinedText > 0 && modelName !== 'unknown') {
-            try {
-                // FIXME: the current endpoint is a local Flask server running on port 5000, use actual endpoint in production
-                const response = await fetch('http://127.0.0.1:5000/calculate', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        // FIXME: use different model names
-                        model: "gpt-4o",
-                        tokens: nTokensCombinedText
-                    }),
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                impactData = await response.json();
-                console.log('Estimated Impact:', impactData);
-
-            } catch (error) {
-                console.error('Error fetching impact calculation:', error);
-                if (badge) badge.textContent = 'Error calculating impact'; // Show error in badge
+            if (badge && badge.textContent !== 'Error calculating impact') { // Show calculating state immediately
+                 badge.textContent = 'Calculating...';
             }
-        }
-        // --- End backend call ---
+            chrome.runtime.sendMessage(
+                {
+                    action: "calculateImpact",
+                    modelName: modelName, // Send model name
+                    tokens: nTokensCombinedText
+                },
+                (response) => {
+                    // This callback runs when the background script sends a response
+                    if (chrome.runtime.lastError) {
+                        // Handle potential errors during message sending itself
+                        console.error("Error sending message:", chrome.runtime.lastError.message);
+                         if (badge) badge.textContent = 'Error contacting background';
+                        return;
+                    }
 
-        if (badge && impactData?.impacts?.energy_kWh?.min !== undefined && impactData?.impacts?.energy_kWh?.max !== undefined && impactData?.impacts?.gwp_kgCO2eq?.min !== undefined && impactData?.impacts?.gwp_kgCO2eq?.max !== undefined) { // Check if badge exists and data is valid
-            const avgEnergy = (impactData.impacts.energy_kWh.min + impactData.impacts.energy_kWh.max) / 2;
-            const avgGhg = (impactData.impacts.gwp_kgCO2eq.min + impactData.impacts.gwp_kgCO2eq.max) / 2;
-            // Use innerHTML to add line breaks and display averages with units after the number
-            badge.innerHTML = `Energy (Avg): ${avgEnergy.toFixed(4)} kWh<br>GHG (Avg): ${avgGhg.toFixed(4)} kgCO2eq`;
-        } else if (badge && !impactData) { // Handle case where calculation is pending or failed
-             if (badge.textContent !== 'Error calculating impact') { // Avoid overwriting error message
-                badge.textContent = 'Calculating...';
-             }
+                    if (response && response.success) {
+                        const impactData = response.data;
+                        console.log('Estimated Impact (from background):', impactData);
+                        // Update badge with received data
+                        updateBadge(impactData);
+                    } else {
+                        // Handle errors reported by the background script
+                        console.error('Error fetching impact calculation (from background):', response ? response.error : 'Unknown error');
+                        if (badge) badge.textContent = 'Error calculating impact'; // Show error in badge
+                    }
+                }
+            );
         } else if (badge) {
-             badge.textContent = 'Impact data unavailable'; // Data structure unexpected
+             // If no tokens or unknown model, clear or set default text
+             badge.textContent = ''; // Or 'Enter text to calculate'
         }
+        // --- End message sending ---
+
     } else if (badge) {
         badge.textContent = ''; // Clear badge if no responses found
+    }
+}
+
+// --- Function to update the badge ---
+function updateBadge(impactData) {
+    // Re-check if badge exists in the DOM, as it might have been removed/recreated
+    badge = document.getElementById(BADGE_ID);
+    if (!badge) {
+        console.log("Badge not found when trying to update.");
+        return; // Exit if badge doesn't exist anymore
+    }
+
+    if (impactData?.impacts?.energy_kWh?.min !== undefined && impactData?.impacts?.energy_kWh?.max !== undefined && impactData?.impacts?.gwp_kgCO2eq?.min !== undefined && impactData?.impacts?.gwp_kgCO2eq?.max !== undefined) {
+        const avgEnergy = (impactData.impacts.energy_kWh.min + impactData.impacts.energy_kWh.max) / 2;
+        const avgGhg = (impactData.impacts.gwp_kgCO2eq.min + impactData.impacts.gwp_kgCO2eq.max) / 2;
+        badge.innerHTML = `Energy: ${avgEnergy.toFixed(4)} kWh<br>GHG: ${avgGhg.toFixed(4)} kgCO2eq`;
+    } else {
+        // Handle cases where data structure is unexpected or calculation failed previously
+        if (badge.textContent !== 'Error calculating impact') { // Avoid overwriting specific error messages
+             badge.textContent = 'Impact data unavailable';
+        }
     }
 }
 

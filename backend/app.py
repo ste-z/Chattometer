@@ -86,7 +86,6 @@ def calculate_impact():
 
         if model_params is None:
             print(f"Model not found for key: '{model_key}' across all providers.") # Log failure
-            raise ModelNotFound(f"Model not found for key: {model_key} across known providers")
 
         # Extract parameters based on architecture type
         if model_params.architecture.type == ArchitectureTypes.MOE:
@@ -99,8 +98,6 @@ def calculate_impact():
         # --- Get electricity mix data ---
         # Use the find_electricity_mix method
         mix_data = electricity_repo.find_electricity_mix(region)
-        if mix_data is None:
-            raise ElectricityMixNotFound(f"Electricity mix not found for region: {region}")
 
         gwp_factor = mix_data.gwp
         adpe_factor = mix_data.adpe
