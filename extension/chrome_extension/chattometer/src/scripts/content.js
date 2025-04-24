@@ -143,6 +143,7 @@ function updateBadge(impactData) {
     if (impactData?.impacts?.energy_kWh?.min !== undefined && impactData?.impacts?.energy_kWh?.max !== undefined && impactData?.impacts?.gwp_kgCO2eq?.min !== undefined && impactData?.impacts?.gwp_kgCO2eq?.max !== undefined) {
         const avgEnergy = (impactData.impacts.energy_kWh.min + impactData.impacts.energy_kWh.max) / 2;
         const avgGhg = (impactData.impacts.gwp_kgCO2eq.min + impactData.impacts.gwp_kgCO2eq.max) / 2;
+        // Use innerHTML carefully, ensure data is sanitized if it came from external source
         currentBadge.innerHTML = `Energy: ${avgEnergy.toFixed(4)} kWh<br>GHG: ${avgGhg.toFixed(4)} kgCO2eq`;
     } else {
         // Handle cases where data structure is unexpected or calculation failed previously
@@ -155,22 +156,37 @@ function updateBadge(impactData) {
 // --- MutationObserver Setup ---
 
 // Define the callback function that runs when mutations are observed
-const callback = function(mutationsList, observer) {
-        findAndLogResponses();
+const mutationCallback = function(mutationsList, obs) {
+    // Check if the badge anchor still exists before running calculations
+    const bottomBox = document.querySelector("div#thread-bottom-container"); // Re-check anchor
+    if (bottomBox) {
+        findAndLogResponses(); // Run the main logic if the anchor is present
+    } else {
+        // If the anchor disappeared (e.g., navigating away), disconnect observer
+        console.log("Badge anchor lost, disconnecting observer.");
+        obs.disconnect();
+        // Optionally, try re-initializing after a delay in case it's a temporary removal
+        // scheduleInitialization(1000);
+    }
 };
-
-// Create the observer instance
-const observer = new MutationObserver(callback);
 
 // Function to find target elements and attach the observer
 function setupObservers() {
-    // Disconnect any previous observers to avoid duplicates on re-setup
-    observer.disconnect();
+    // Disconnect any previous observers to avoid duplicates
+    if (observer) {
+        observer.disconnect();
+        console.log("Disconnected previous observer.");
+    } else {
+        // Create the observer instance if it doesn't exist
+        observer = new MutationObserver(mutationCallback);
+    }
+
     console.log("Attempting to set up specific observers...");
 
     let observedSomething = false;
 
-    // Target 1: Response container (Specific: #thread > div:nth-child(1) > div:nth-child(2))
+    // Target 1: Response container (Specific: #thread > div:nth-child(1) > div:nth-child(2)) - Example for Gemini
+    // TODO: Add selectors for other platforms
     const specificResponseContainer = document.querySelector("#thread > div:nth-child(1) > div:nth-child(2)");
 
     if (specificResponseContainer) {
@@ -178,54 +194,111 @@ function setupObservers() {
         observer.observe(specificResponseContainer, { childList: true, subtree: true });
         observedSomething = true;
     } else {
-        console.warn("Specific response container (#thread > div:nth-child(1) > div:nth-child(2)) not found. Falling back...");
-        // Fallback: Try finding the common parent of agent turns
-        const firstAgentTurn = document.querySelector("div.agent-turn");
-        // Find the closest ancestor div that might contain all turns
-        const genericResponseContainer = firstAgentTurn ? firstAgentTurn.closest('div[class*="react-scroll-to-bottom"] > div') || firstAgentTurn.parentElement : null;
+        console.warn("Specific response container (#thread > div:nth-child(1) > div:nth-child(2)) not found. Observation might be less targeted.");
+        // Fallback: Observe a broader container if specific one isn't found, or rely on body observation later
+        const genericResponseContainer = document.querySelector('div[class*="react-scroll-to-bottom"] > div'); // Common in ChatGPT
         if (genericResponseContainer && genericResponseContainer !== document.body) {
             console.log("Observing generic response container:", genericResponseContainer);
             observer.observe(genericResponseContainer, { childList: true, subtree: true });
             observedSomething = true;
-        } else {
-            console.warn("Generic response container not found or is body. Observation might be broad.");
         }
     }
 
-    // Target 2: Model switcher button
+    // Target 2: Model switcher button (Example selector)
+    // TODO: Add selectors for other platforms
     const modelSwitcherButton = document.querySelector('button[data-testid="model-switcher-dropdown-button"]');
     if (modelSwitcherButton) {
         console.log("Observing model switcher button:", modelSwitcherButton);
+        // Observe changes to the button's text content (subtree and characterData)
         observer.observe(modelSwitcherButton, { childList: true, subtree: true, characterData: true });
-        observedSomething = true;
+        // Note: Observing the button itself might not be necessary if observing the response container catches model changes indirectly.
+        // Keep it if model changes *without* new responses need immediate recalculation.
+        observedSomething = true; // Count this even if container was also observed
     } else {
         console.warn("Model switcher button not found.");
     }
 
-    // If no specific targets were found after fallbacks, observe the body as a last resort.
+    // If no specific targets were found, observe the body as a last resort.
+    // This is less efficient but provides broader coverage.
     if (!observedSomething) {
         console.warn("Could not find specific elements. Falling back to observing document body.");
+        // Ensure we don't observe the body if we already observed something more specific
         observer.observe(document.body, { childList: true, subtree: true });
     } else {
         console.log("Specific observers attached.");
     }
 }
 
-// --- Initial Execution and Event Listeners ---
+// --- Initialization Logic ---
 
-// Re-run logic and observer setup on navigation events (useful for SPAs)
+function initializeChattometer() {
+    console.log("Initializing Chattometer...");
+    // 1. Ensure the badge exists or can be created
+    if (ensureBadgeExists()) {
+        // 2. Run the calculation logic immediately if badge is ready
+        findAndLogResponses();
+        // 3. Set up observers to watch for changes
+        setupObservers();
+    } else {
+        // If badge couldn't be created (anchor not found), schedule another attempt
+        console.log("Badge anchor not found. Retrying initialization soon...");
+        scheduleInitialization(1000); // Try again in 1 second
+    }
+}
+
+// Debounced initialization function
+function scheduleInitialization(delay = 500) {
+    clearTimeout(initializationTimer); // Clear any existing timer
+    initializationTimer = setTimeout(initializeChattometer, delay);
+}
+
+// --- Event Listeners for Navigation ---
+
+// Listen for standard navigation events
 window.addEventListener('popstate', () => {
     console.log("popstate event triggered.");
-    // Use setTimeout to allow the DOM to update after navigation
-    setTimeout(() => {
-        findAndLogResponses(); // Run main logic to update badge based on new page state
-        setupObservers();    // Re-attach observers to potentially new elements
-    }, 500);
+    scheduleInitialization();
+});
+window.addEventListener('hashchange', () => {
+    console.log("hashchange event triggered.");
+    scheduleInitialization();
 });
 
-// Initial execution: Wait a bit for the page to load, then run logic and set up observers
-setTimeout(() => {
-    console.log("Initial execution after delay.");
-    findAndLogResponses();
-    setupObservers();
-}, 1500); // Increased delay slightly for potentially slower loading pages
+// Wrap history API methods to detect SPA navigation
+const originalPushState = history.pushState;
+history.pushState = function() {
+    const result = originalPushState.apply(this, arguments);
+    window.dispatchEvent(new Event('pushstate')); // Dispatch custom event
+    window.dispatchEvent(new Event('locationchange')); // Generic event
+    return result;
+};
+
+const originalReplaceState = history.replaceState;
+history.replaceState = function() {
+    const result = originalReplaceState.apply(this, arguments);
+    window.dispatchEvent(new Event('replacestate')); // Dispatch custom event
+    window.dispatchEvent(new Event('locationchange')); // Generic event
+    return result;
+};
+
+// Listen for our custom navigation events
+window.addEventListener('pushstate', () => {
+    console.log("pushstate intercepted.");
+    scheduleInitialization();
+});
+window.addEventListener('replacestate', () => {
+    console.log("replacestate intercepted.");
+    scheduleInitialization();
+});
+
+// --- Initial Load ---
+
+// Use DOMContentLoaded for potentially faster initial load than window.load
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => scheduleInitialization(1000)); // Add slight delay even on DOMContentLoaded
+} else {
+    // If DOMContentLoaded has already fired
+    scheduleInitialization(1500); // Use the original longer delay if loaded later
+}
+
+console.log("Chattometer content script loaded.");
