@@ -4,9 +4,6 @@ import o200k_base from "js-tiktoken/ranks/o200k_base";
 let badge = null; // Declare badge variable outside
 const BADGE_ID = "chattometer-impact-badge"; // Unique ID for the badge
 
-// TODO: set class
-// badge.classList.add("");
-
 // FIXME: use different logic for different URL (different chat platforms)
 async function findAndLogResponses() {
     // --- Try to find or create and insert the badge ---
@@ -30,6 +27,7 @@ async function findAndLogResponses() {
             badge.style.padding = "2px 8px"; // Add some padding
         } else {
             // If bottomBox isn't found yet, return and let MutationObserver/navigation listener try again
+            console.log("Bottom box not found, cannot create badge yet.");
             return;
         }
     }
@@ -60,6 +58,7 @@ async function findAndLogResponses() {
         // FIXME: Currently only combined impact is calculated. Also implement last response impact calculation
         if (nTokensCombinedText > 0 && modelName !== 'unknown') {
             try {
+                // FIXME: the current endpoint is a local Flask server running on port 5000, use actual endpoint in production
                 const response = await fetch('http://127.0.0.1:5000/calculate', {
                     method: 'POST',
                     headers: {
@@ -68,7 +67,7 @@ async function findAndLogResponses() {
                     body: JSON.stringify({
                         // FIXME: use different model names
                         model: "gpt-4o",
-                        tokens: nTokensCombinedText // Send tokens for the last response
+                        tokens: nTokensCombinedText
                     }),
                 });
 
@@ -78,10 +77,10 @@ async function findAndLogResponses() {
 
                 impactData = await response.json();
                 console.log('Estimated Impact:', impactData);
-                // TODO: Display this data in the extension UI (e.g., popup or inject into page)
 
             } catch (error) {
                 console.error('Error fetching impact calculation:', error);
+                if (badge) badge.textContent = 'Error calculating impact'; // Show error in badge
             }
         }
         // --- End backend call ---
@@ -89,24 +88,94 @@ async function findAndLogResponses() {
         if (badge && impactData?.impacts?.energy_kWh?.min !== undefined && impactData?.impacts?.energy_kWh?.max !== undefined && impactData?.impacts?.gwp_kgCO2eq?.min !== undefined && impactData?.impacts?.gwp_kgCO2eq?.max !== undefined) { // Check if badge exists and data is valid
             const avgEnergy = (impactData.impacts.energy_kWh.min + impactData.impacts.energy_kWh.max) / 2;
             const avgGhg = (impactData.impacts.gwp_kgCO2eq.min + impactData.impacts.gwp_kgCO2eq.max) / 2;
-            badge.innerHTML = `⚡ Energy: ${avgEnergy.toFixed(4)} kWh<br>🏭 GHG Emissions: ${avgGhg.toFixed(4)} kgCO2eq`;
+            // Use innerHTML to add line breaks and display averages with units after the number
+            badge.innerHTML = `Energy (Avg): ${avgEnergy.toFixed(4)} kWh<br>GHG (Avg): ${avgGhg.toFixed(4)} kgCO2eq`;
+        } else if (badge && !impactData) { // Handle case where calculation is pending or failed
+             if (badge.textContent !== 'Error calculating impact') { // Avoid overwriting error message
+                badge.textContent = 'Calculating...';
+             }
         } else if (badge) {
-            badge.textContent = 'Calculating...';
+             badge.textContent = 'Impact data unavailable'; // Data structure unexpected
         }
     } else if (badge) {
         badge.textContent = ''; // Clear badge if no responses found
     }
 }
 
-// Continuous re-execute when mutations are observed
+// --- MutationObserver Setup ---
+
+// Define the callback function that runs when mutations are observed
 const callback = function(mutationsList, observer) {
-    findAndLogResponses();
+        findAndLogResponses();
 };
+
+// Create the observer instance
 const observer = new MutationObserver(callback);
-observer.observe(document.body, { childList: true, subtree: true });
 
-// Re-run on navigation events (useful for SPAs)
-window.addEventListener('popstate', findAndLogResponses);
+// Function to find target elements and attach the observer
+function setupObservers() {
+    // Disconnect any previous observers to avoid duplicates on re-setup
+    observer.disconnect();
+    console.log("Attempting to set up specific observers...");
 
-// Initial check in case the elements are already present at script execution
-findAndLogResponses();
+    let observedSomething = false;
+
+    // Target 1: Response container (Specific: #thread > div:nth-child(1) > div:nth-child(2))
+    const specificResponseContainer = document.querySelector("#thread > div:nth-child(1) > div:nth-child(2)");
+
+    if (specificResponseContainer) {
+        console.log("Observing specific response container:", specificResponseContainer);
+        observer.observe(specificResponseContainer, { childList: true, subtree: true });
+        observedSomething = true;
+    } else {
+        console.warn("Specific response container (#thread > div:nth-child(1) > div:nth-child(2)) not found. Falling back...");
+        // Fallback: Try finding the common parent of agent turns
+        const firstAgentTurn = document.querySelector("div.agent-turn");
+        // Find the closest ancestor div that might contain all turns
+        const genericResponseContainer = firstAgentTurn ? firstAgentTurn.closest('div[class*="react-scroll-to-bottom"] > div') || firstAgentTurn.parentElement : null;
+        if (genericResponseContainer && genericResponseContainer !== document.body) {
+            console.log("Observing generic response container:", genericResponseContainer);
+            observer.observe(genericResponseContainer, { childList: true, subtree: true });
+            observedSomething = true;
+        } else {
+            console.warn("Generic response container not found or is body. Observation might be broad.");
+        }
+    }
+
+    // Target 2: Model switcher button
+    const modelSwitcherButton = document.querySelector('button[data-testid="model-switcher-dropdown-button"]');
+    if (modelSwitcherButton) {
+        console.log("Observing model switcher button:", modelSwitcherButton);
+        observer.observe(modelSwitcherButton, { childList: true, subtree: true, characterData: true });
+        observedSomething = true;
+    } else {
+        console.warn("Model switcher button not found.");
+    }
+
+    // If no specific targets were found after fallbacks, observe the body as a last resort.
+    if (!observedSomething) {
+        console.warn("Could not find specific elements. Falling back to observing document body.");
+        observer.observe(document.body, { childList: true, subtree: true });
+    } else {
+        console.log("Specific observers attached.");
+    }
+}
+
+// --- Initial Execution and Event Listeners ---
+
+// Re-run logic and observer setup on navigation events (useful for SPAs)
+window.addEventListener('popstate', () => {
+    console.log("popstate event triggered.");
+    // Use setTimeout to allow the DOM to update after navigation
+    setTimeout(() => {
+        findAndLogResponses(); // Run main logic to update badge based on new page state
+        setupObservers();    // Re-attach observers to potentially new elements
+    }, 500);
+});
+
+// Initial execution: Wait a bit for the page to load, then run logic and set up observers
+setTimeout(() => {
+    console.log("Initial execution after delay.");
+    findAndLogResponses();
+    setupObservers();
+}, 1500); // Increased delay slightly for potentially slower loading pages
