@@ -19,7 +19,7 @@ async function findAndLogResponses() {
         // Badge doesn't exist, try to create it
         const bottomBox = document.querySelector("div#thread-bottom-container");
         if (bottomBox) {
-            badge = document.createElement("p");
+            badge = document.createElement("div");
             badge.id = BADGE_ID; // Assign the unique ID
             bottomBox.insertAdjacentElement("beforebegin", badge); // Insert before the bottom box
             badge.classList.add("text-token-text-secondary", "text-xs", "font-semibold", "text-center");
@@ -86,11 +86,12 @@ async function findAndLogResponses() {
         }
         // --- End backend call ---
 
-        // TODO: Format the impact data
-        if (badge && impactData?.impacts?.energy_kWh?.max) { // Check if badge exists and data is valid
-            badge.textContent = `Energy Impact (Max kWh): ${impactData.impacts.energy_kWh.max.toFixed(4)}`; // Example formatting
+        if (badge && impactData?.impacts?.energy_kWh?.min !== undefined && impactData?.impacts?.energy_kWh?.max !== undefined && impactData?.impacts?.gwp_kgCO2eq?.min !== undefined && impactData?.impacts?.gwp_kgCO2eq?.max !== undefined) { // Check if badge exists and data is valid
+            const avgEnergy = (impactData.impacts.energy_kWh.min + impactData.impacts.energy_kWh.max) / 2;
+            const avgGhg = (impactData.impacts.gwp_kgCO2eq.min + impactData.impacts.gwp_kgCO2eq.max) / 2;
+            badge.innerHTML = `⚡ Energy: ${avgEnergy.toFixed(4)} kWh<br>🏭 GHG Emissions: ${avgGhg.toFixed(4)} kgCO2eq`;
         } else if (badge) {
-            badge.textContent = 'Calculating...'; // Or some placeholder
+            badge.textContent = 'Calculating...';
         }
     } else if (badge) {
         badge.textContent = ''; // Clear badge if no responses found
