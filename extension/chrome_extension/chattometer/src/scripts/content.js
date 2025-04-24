@@ -1,9 +1,40 @@
 import { Tiktoken } from "js-tiktoken/lite";
 import o200k_base from "js-tiktoken/ranks/o200k_base";
 
+let badge = null; // Declare badge variable outside
+const BADGE_ID = "chattometer-impact-badge"; // Unique ID for the badge
+
+// TODO: set class
+// badge.classList.add("");
 
 // FIXME: use different logic for different URL (different chat platforms)
-async function findAndLogResponses() { 
+async function findAndLogResponses() {
+    // --- Try to find or create and insert the badge ---
+    // Check if the badge already exists in the current DOM
+    let existingBadge = document.getElementById(BADGE_ID);
+
+    if (existingBadge) {
+        badge = existingBadge; // Update global reference
+    } else {
+        // Badge doesn't exist, try to create it
+        const bottomBox = document.querySelector("div#thread-bottom-container");
+        if (bottomBox) {
+            badge = document.createElement("p");
+            badge.id = BADGE_ID; // Assign the unique ID
+            bottomBox.insertAdjacentElement("beforebegin", badge); // Insert before the bottom box
+            badge.classList.add("text-token-text-secondary", "text-xs", "font-semibold", "text-center");
+            // Add styles for blurred background
+            badge.style.backgroundColor = "rgba(255, 255, 255, 0.7)"; // Semi-transparent white background
+            badge.style.backdropFilter = "blur(4px)"; // Apply blur effect
+            badge.style.webkitBackdropFilter = "blur(4px)"; // For Safari compatibility
+            badge.style.padding = "2px 8px"; // Add some padding
+        } else {
+            // If bottomBox isn't found yet, return and let MutationObserver/navigation listener try again
+            return;
+        }
+    }
+    // --- End badge finding/creation ---
+
     let responses = document.querySelectorAll("div.agent-turn");
     const modelElement = document.querySelector('button[data-testid="model-switcher-dropdown-button"] span');
     const modelName = modelElement ? modelElement.textContent.trim() : 'unknown'; // Get model name
@@ -16,6 +47,7 @@ async function findAndLogResponses() {
     let lastResponse = null;
     let nTokensCombinedText = 0;
     let nTokensLastResponse = 0;
+    let impactData = null;
 
     if (responses.length > 0) {
         textArray = Array.from(responses).map(element => element.textContent || '');
@@ -25,7 +57,8 @@ async function findAndLogResponses() {
         nTokensLastResponse  = enc.encode(lastResponse.textContent || '').length;
 
         // --- Call the backend ---
-        if (nTokensLastResponse > 0 && modelName !== 'unknown') {
+        // FIXME: Currently only combined impact is calculated. Also implement last response impact calculation
+        if (nTokensCombinedText > 0 && modelName !== 'unknown') {
             try {
                 const response = await fetch('http://127.0.0.1:5000/calculate', {
                     method: 'POST',
@@ -43,7 +76,7 @@ async function findAndLogResponses() {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
 
-                const impactData = await response.json();
+                impactData = await response.json();
                 console.log('Estimated Impact:', impactData);
                 // TODO: Display this data in the extension UI (e.g., popup or inject into page)
 
@@ -52,9 +85,18 @@ async function findAndLogResponses() {
             }
         }
         // --- End backend call ---
+
+        // TODO: Format the impact data
+        if (badge && impactData?.impacts?.energy_kWh?.max) { // Check if badge exists and data is valid
+            badge.textContent = `Energy Impact (Max kWh): ${impactData.impacts.energy_kWh.max.toFixed(4)}`; // Example formatting
+        } else if (badge) {
+            badge.textContent = 'Calculating...'; // Or some placeholder
+        }
+    } else if (badge) {
+        badge.textContent = ''; // Clear badge if no responses found
     }
 }
-  
+
 // Continuous re-execute when mutations are observed
 const callback = function(mutationsList, observer) {
     findAndLogResponses();
@@ -62,11 +104,8 @@ const callback = function(mutationsList, observer) {
 const observer = new MutationObserver(callback);
 observer.observe(document.body, { childList: true, subtree: true });
 
+// Re-run on navigation events (useful for SPAs)
+window.addEventListener('popstate', findAndLogResponses);
+
 // Initial check in case the elements are already present at script execution
 findAndLogResponses();
-
-// Disconnecting the observer after a timeout
-//   setTimeout(() => {
-//      observer.disconnect();
-//      console.log("Observer stopped waiting.");
-//   }, 15000); // Stop after 15 seconds

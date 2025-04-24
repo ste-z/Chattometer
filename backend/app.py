@@ -21,7 +21,6 @@ try:
     from ecologits.model_repository import ModelRepository, ArchitectureTypes, Providers
     from ecologits.electricity_mix_repository import ElectricityMixRepository
     from ecologits.utils.range_value import RangeValue # Import RangeValue
-    from ecologits.exceptions import ModelNotFound, ElectricityMixNotFound
 except ImportError as e:
     print(f"Error importing from ecologits submodule: {e}")
     sys.exit(1)
