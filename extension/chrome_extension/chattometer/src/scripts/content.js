@@ -1,22 +1,25 @@
-function findAndLogResponses() {
-    const responses = document.querySelectorAll("div.agent-turn");
-    // FIXME: Remove console.log in production code
-    if (responses.length > 0) {
-        console.log("Responses found:", responses);
+import { Tiktoken } from "js-tiktoken/lite";
+import o200k_base from "js-tiktoken/ranks/o200k_base";
 
-        textArray = Array.from(responses).map(element => element.textContent || '');
-        const combinedText = textArray.join('');
-        console.log(combinedText);
-        const lastResponse = responses[responses.length - 1];
-        console.log(lastResponse);
-    } else {
-        console.log("Waiting for responses to appear...");
+const enc = new Tiktoken(o200k_base);
+
+function findAndLogResponses() {
+    let responses = document.querySelectorAll("div.agent-turn");
+
+    if (responses.length > 0) {
+        let textArray = Array.from(responses).map(element => element.textContent || '');
+        let combinedText = textArray.join('');
+        let lastResponse = responses[responses.length - 1];
+        let nTokensCombinedText = enc.encode(combinedText).length;
+        let nTokensLastResponse  = enc.encode(lastResponse).length;
+
+
     }
 }
   
 // Continuous re-execute when mutations are observed
 const callback = function(mutationsList, observer) {
-findAndLogResponses();
+    findAndLogResponses();
 };
 const observer = new MutationObserver(callback);
 observer.observe(document.body, { childList: true, subtree: true });

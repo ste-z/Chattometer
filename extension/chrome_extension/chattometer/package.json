@@ -49,5 +49,9 @@
                 "src": "./src/scripts/content.js"
             }
         ]
+    },
+    "dependencies": {
+        "js-tiktoken": "^1.0.20",
+        "tiktoken": "^1.0.21"
     }
 }
