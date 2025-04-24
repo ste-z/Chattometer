@@ -1,0 +1,3 @@
+[submodule "backend/submods/ecologits"]
+	path = backend/submods/ecologits
+	url = https://github.com/genai-impact/ecologits.git
