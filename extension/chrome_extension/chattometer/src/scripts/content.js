@@ -1,19 +1,25 @@
 import { Tiktoken } from "js-tiktoken/lite";
 import o200k_base from "js-tiktoken/ranks/o200k_base";
 
-const enc = new Tiktoken(o200k_base);
-
 function findAndLogResponses() {
     let responses = document.querySelectorAll("div.agent-turn");
+    const model = document.querySelector('button[data-testid="model-switcher-dropdown-button"] span');
+
+    // FIXME: use different tokenizer for different models
+    const enc = new Tiktoken(o200k_base);
+
+    let textArray = [];
+    let combinedText = '';
+    let lastResponse = null;
+    let nTokensCombinedText = 0;
+    let nTokensLastResponse = 0;
 
     if (responses.length > 0) {
-        let textArray = Array.from(responses).map(element => element.textContent || '');
-        let combinedText = textArray.join('');
-        let lastResponse = responses[responses.length - 1];
-        let nTokensCombinedText = enc.encode(combinedText).length;
-        let nTokensLastResponse  = enc.encode(lastResponse).length;
-
-
+        textArray = Array.from(responses).map(element => element.textContent || '');
+        combinedText = textArray.join('');
+        lastResponse = responses[responses.length - 1];
+        nTokensCombinedText = enc.encode(combinedText).length;
+        nTokensLastResponse  = enc.encode(lastResponse.textContent || '').length;
     }
 }
   
