@@ -3,38 +3,64 @@ import o200k_base from "js-tiktoken/ranks/o200k_base";
 
 let badge = null; // Declare badge variable outside
 const BADGE_ID = "chattometer-impact-badge"; // Unique ID for the badge
+let observer = null; // Keep observer instance accessible
+let initializationTimer = null; // Timer for debouncing initialization
+
+// --- Function to find or create the badge ---
+function ensureBadgeExists() {
+    // Check if the badge already exists in the current DOM
+    let existingBadge = document.getElementById(BADGE_ID);
+    if (existingBadge) {
+        badge = existingBadge; // Update global reference
+        return true; // Badge exists
+    }
+
+    // Badge doesn't exist, try to create it
+    const bottomBox = document.querySelector("div#thread-bottom-container"); // Specific to some UIs like Gemini
+    // TODO: Add selectors for other platforms (ChatGPT, Claude, etc.)
+    if (bottomBox) {
+        badge = document.createElement("div");
+        badge.id = BADGE_ID; // Assign the unique ID
+        bottomBox.insertAdjacentElement("beforebegin", badge); // Insert before the bottom box
+        badge.classList.add("text-token-text-secondary", "text-xs", "font-semibold", "text-center");
+        // Add styles for blurred background
+        badge.style.backgroundColor = "rgba(255, 255, 255, 0.7)"; // Semi-transparent white background
+        badge.style.backdropFilter = "blur(4px)"; // Apply blur effect
+        badge.style.webkitBackdropFilter = "blur(4px)"; // For Safari compatibility
+        badge.style.padding = "2px 8px"; // Add some padding
+        badge.style.marginTop = "4px"; // Add some margin
+        badge.style.marginBottom = "4px"; // Add some margin
+        console.log("Chattometer badge created.");
+        return true; // Badge created
+    } else {
+        // If bottomBox isn't found yet, return false
+        console.log("Bottom box not found, cannot create badge yet.");
+        badge = null; // Ensure badge reference is null if creation fails
+        return false; // Badge could not be created
+    }
+}
 
 // FIXME: use different logic for different URL (different chat platforms)
 async function findAndLogResponses() {
     // --- Try to find or create and insert the badge ---
-    // Check if the badge already exists in the current DOM
-    let existingBadge = document.getElementById(BADGE_ID);
-
-    if (existingBadge) {
-        badge = existingBadge; // Update global reference
-    } else {
-        // Badge doesn't exist, try to create it
-        const bottomBox = document.querySelector("div#thread-bottom-container");
-        if (bottomBox) {
-            badge = document.createElement("div");
-            badge.id = BADGE_ID; // Assign the unique ID
-            bottomBox.insertAdjacentElement("beforebegin", badge); // Insert before the bottom box
-            badge.classList.add("text-token-text-secondary", "text-xs", "font-semibold", "text-center");
-            // Add styles for blurred background
-            badge.style.backgroundColor = "rgba(255, 255, 255, 0.7)"; // Semi-transparent white background
-            badge.style.backdropFilter = "blur(4px)"; // Apply blur effect
-            badge.style.webkitBackdropFilter = "blur(4px)"; // For Safari compatibility
-            badge.style.padding = "2px 8px"; // Add some padding
-        } else {
-            // If bottomBox isn't found yet, return and let MutationObserver/navigation listener try again
-            console.log("Bottom box not found, cannot create badge yet.");
-            return;
-        }
+    if (!ensureBadgeExists()) {
+        // If badge couldn't be found or created (e.g., anchor element not ready), stop here.
+        // The MutationObserver or next initialization attempt will try again.
+        return;
     }
     // --- End badge finding/creation ---
 
-    let responses = document.querySelectorAll("div.agent-turn");
-    const modelElement = document.querySelector('button[data-testid="model-switcher-dropdown-button"] span');
+    // Ensure badge reference is up-to-date (might have been recreated)
+    badge = document.getElementById(BADGE_ID);
+    if (!badge) {
+        console.error("Badge element lost unexpectedly after creation check.");
+        return;
+    }
+
+    let responses = document.querySelectorAll("div.agent-turn"); // Example selector, adjust per platform
+    // TODO: Add selectors for other platforms
+    const modelElement = document.querySelector('button[data-testid="model-switcher-dropdown-button"] span'); // Example selector
+    // TODO: Add selectors for other platforms
     const modelName = modelElement ? modelElement.textContent.trim() : 'unknown'; // Get model name
 
     // FIXME: use different tokenizer for different models
@@ -51,13 +77,14 @@ async function findAndLogResponses() {
         combinedText = textArray.join('');
         lastResponse = responses[responses.length - 1];
         nTokensCombinedText = enc.encode(combinedText).length;
-        nTokensLastResponse  = enc.encode(lastResponse.textContent || '').length;
+        nTokensLastResponse = enc.encode(lastResponse.textContent || '').length;
 
         // --- Send message to background script ---
         // FIXME: Currently only combined impact is calculated. Also implement last response impact calculation
         if (nTokensCombinedText > 0 && modelName !== 'unknown') {
-            if (badge && badge.textContent !== 'Error calculating impact') { // Show calculating state immediately
-                 badge.textContent = 'Calculating...';
+            // Avoid showing "Calculating..." if an error is already displayed
+            if (badge && !badge.textContent.startsWith('Error')) {
+                badge.textContent = 'Calculating...';
             }
             chrome.runtime.sendMessage(
                 {
@@ -66,11 +93,15 @@ async function findAndLogResponses() {
                     tokens: nTokensCombinedText
                 },
                 (response) => {
+                    // Re-fetch the badge element inside the callback, as it might have changed
+                    const currentBadge = document.getElementById(BADGE_ID);
+                    if (!currentBadge) return; // Badge disappeared
+
                     // This callback runs when the background script sends a response
                     if (chrome.runtime.lastError) {
                         // Handle potential errors during message sending itself
                         console.error("Error sending message:", chrome.runtime.lastError.message);
-                         if (badge) badge.textContent = 'Error contacting background';
+                        currentBadge.textContent = 'Error contacting background';
                         return;
                     }
 
@@ -78,30 +109,33 @@ async function findAndLogResponses() {
                         const impactData = response.data;
                         console.log('Estimated Impact (from background):', impactData);
                         // Update badge with received data
-                        updateBadge(impactData);
+                        updateBadge(impactData); // Pass currentBadge reference if needed, or let updateBadge find it
                     } else {
                         // Handle errors reported by the background script
                         console.error('Error fetching impact calculation (from background):', response ? response.error : 'Unknown error');
-                        if (badge) badge.textContent = 'Error calculating impact'; // Show error in badge
+                        currentBadge.textContent = 'Error calculating impact'; // Show error in badge
                     }
                 }
             );
         } else if (badge) {
-             // If no tokens or unknown model, clear or set default text
-             badge.textContent = ''; // Or 'Enter text to calculate'
+            // If no tokens or unknown model, clear or set default text
+            if (!badge.textContent.startsWith('Error')) { // Don't clear error messages
+                badge.textContent = ''; // Or 'Enter text to calculate'
+            }
         }
         // --- End message sending ---
-
     } else if (badge) {
-        badge.textContent = ''; // Clear badge if no responses found
+        if (!badge.textContent.startsWith('Error')) { // Don't clear error messages
+            badge.textContent = ''; // Clear badge if no responses found
+        }
     }
 }
 
 // --- Function to update the badge ---
 function updateBadge(impactData) {
     // Re-check if badge exists in the DOM, as it might have been removed/recreated
-    badge = document.getElementById(BADGE_ID);
-    if (!badge) {
+    const currentBadge = document.getElementById(BADGE_ID);
+    if (!currentBadge) {
         console.log("Badge not found when trying to update.");
         return; // Exit if badge doesn't exist anymore
     }
@@ -109,11 +143,11 @@ function updateBadge(impactData) {
     if (impactData?.impacts?.energy_kWh?.min !== undefined && impactData?.impacts?.energy_kWh?.max !== undefined && impactData?.impacts?.gwp_kgCO2eq?.min !== undefined && impactData?.impacts?.gwp_kgCO2eq?.max !== undefined) {
         const avgEnergy = (impactData.impacts.energy_kWh.min + impactData.impacts.energy_kWh.max) / 2;
         const avgGhg = (impactData.impacts.gwp_kgCO2eq.min + impactData.impacts.gwp_kgCO2eq.max) / 2;
-        badge.innerHTML = `Energy: ${avgEnergy.toFixed(4)} kWh<br>GHG: ${avgGhg.toFixed(4)} kgCO2eq`;
+        currentBadge.innerHTML = `Energy: ${avgEnergy.toFixed(4)} kWh<br>GHG: ${avgGhg.toFixed(4)} kgCO2eq`;
     } else {
         // Handle cases where data structure is unexpected or calculation failed previously
-        if (badge.textContent !== 'Error calculating impact') { // Avoid overwriting specific error messages
-             badge.textContent = 'Impact data unavailable';
+        if (!currentBadge.textContent.startsWith('Error')) { // Avoid overwriting specific error messages
+            currentBadge.textContent = 'Impact data unavailable';
         }
     }
 }
