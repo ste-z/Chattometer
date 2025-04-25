@@ -1,4 +1,2 @@
-extension/chrome_extension/chattometer/.DS_Store
-extension/chrome_extension/.DS_Store
-extension/.DS_Store
-.DS_Store
+**/.DS_Store
+release.pem
