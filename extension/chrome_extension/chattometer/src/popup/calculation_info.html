@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>How This is Calculated?</title>
+    <style>
+        body {
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #ffffff;
+            color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .content {
+            background-color: #3e7863;
+            padding: 20px;
+            border-radius: 12px;
+            width: 320px; /* Decreased width */
+            height: 400px; /* Fixed height */
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            overflow-y: auto; /* Enable vertical scrolling */
+        }
+
+        h1 {
+            font-size: 1.5em;
+            color: #ffffff;
+            margin-top: 0;
+        }
+
+        h2 {
+            font-size: 1.2em;
+            color: #ffffff;
+            margin-top: 20px;
+        }
+
+        p, ul {
+            font-size: 0.95em;
+            line-height: 1.6;
+            color: #ffffff;
+            margin-bottom: 15px;
+        }
+
+        ul {
+            padding-left: 20px;
+        }
+
+        li {
+            margin-bottom: 10px;
+        }
+
+        a {
+            color: #cfcfcf;
+            text-decoration: underline;
+        }
+
+        .back-link {
+            display: inline-block;
+            background-color: #ffffff;
+            color: #3e7863;
+            text-decoration: none;
+            border-radius: 8px;
+            padding: 10px 15px;
+            font-size: 0.9em;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            margin-top: 20px; /* Add spacing above the link */
+            text-align: center;
+        }
+
+        .back-link:hover {
+            background-color: #e6e6e6;
+        }
+    </style>
+</head>
+<body>
+    <div class="content">
+        <h1>How This is Calculated?</h1>
+        <p>The energy and water usage values are calculated based on the following factors:</p>
+        
+        <h2>Calculation of Impacts</h2>
+        <p>The impacts are further divided into:</p>
+        
+        <h3>Usage Impact</h3>
+        <p>This refers to the energy consumption of the server during inference. The calculation involves:</p>
+        <ul>
+            <li>Single GPU usage modeled using linear regression trained on Hugging Face’s LLM Leaderboard dataset, relating GPU energy per output token to the model’s active parameters.</li>
+            <li>Predicting the energy consumption per output token based on the active parameter count of models not in the dataset (which may require educated guesses for unpublished data).</li>
+            <li>Multiplying the single GPU usage with the estimated number of active GPUs required, which is determined by the memory needed to run the model.</li>
+            <li>Summing this with the server energy usage without GPUs to obtain the total usage impact.</li>
+        </ul>
+        
+        <h3>Embodied Impacts</h3>
+        <p>These include resource extraction, hardware manufacturing, and transportation. The calculation involves:</p>
+        <ul>
+            <li>Using BoaviztAPI to estimate the embodied impacts.</li>
+            <li>Allocating these impacts per request using a hardware utilization factor.</li>
+        </ul>
+
+        <a class="back-link" href="default_popup.html">Back</a>
+    </div>
+</body>
+</html>
