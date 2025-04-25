@@ -1,4 +1,4 @@
-# Chattometer: Track Your AI's Environmental Impact 🌱
+# Chattometer: Track the Environmental Impacts of Your Chatbot Usage 🌱
 
 *By: Nuo Cen, Steven Zhou, Baihe Peng*
 
