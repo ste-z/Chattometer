@@ -15,7 +15,7 @@ executing==2.1.0
 fastapi==0.112.2
 Flask==3.1.0
 flask-cors==5.0.1
-h11==0.16.0
+h11>=0.13
 httpcore==1.0.8
 httpx==0.28.1
 idna==3.7
