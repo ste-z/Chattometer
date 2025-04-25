@@ -4,28 +4,8 @@
   \****************************/
 // Helper to clear popup fields when chat has no data
 function clearPopup() {
-  document.getElementById('popup-cum-date').textContent = 'Cumulative impact since N/A';
-  document.getElementById('popup-cum-tokens').textContent = '--';
-  document.getElementById('popup-cum-energy').textContent = '-- Wh';
-  document.getElementById('popup-cum-ghg').textContent = '-- gCO2eq';
-}
-
-// Helper to render data into the popup
-function renderPopup(data, req) {
-  // Update date
-  const dateEl = document.getElementById('popup-date');
-  const dateStr = new Date(req.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  dateEl.textContent = dateStr;
-  // Update tokens
-  document.getElementById('popup-tokens').textContent = req.tokens;
-  // Update energy
-  const energyRange = data.impacts.energy_kWh;
-  const avgEnergyWh = ((energyRange.min + energyRange.max) / 2) * 1000;
-  document.getElementById('popup-energy').textContent = avgEnergyWh.toFixed(1) + ' Wh';
-  // Update GHG
-  const ghgRange = data.impacts.gwp_kgCO2eq;
-  const avgGhgG = ((ghgRange.min + ghgRange.max) / 2) * 1000;
-  document.getElementById('popup-ghg').textContent = avgGhgG.toFixed(1) + ' gCO2eq';
+  document.getElementById('equiv-bulb-minutes').textContent = '--';
+  document.getElementById('equiv-laptop-hours').textContent = '--';
 }
 
 // Log when popup script is loaded
@@ -129,13 +109,24 @@ function updateCumulative(cumMap) {
     ? new Date(sinceTimestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     : 'N/A';
   const cumDateEl = document.getElementById('popup-cum-date');
-  if (cumDateEl) cumDateEl.textContent = `Cumulative impact since ${sinceDateStr}`;
+  if (cumDateEl) cumDateEl.textContent = `Cumulative impacts since ${sinceDateStr}`;
   const cumTokensEl = document.getElementById('popup-cum-tokens');
   if (cumTokensEl) cumTokensEl.textContent = totalTokens.toString();
   const cumEnergyEl = document.getElementById('popup-cum-energy');
   const cumGhgEl = document.getElementById('popup-cum-ghg');
   if (cumEnergyEl) cumEnergyEl.textContent = totalEnergy.toFixed(1) + ' Wh';
   if (cumGhgEl) cumGhgEl.textContent = totalGhg.toFixed(1) + ' gCO2eq';
+  // Update cumulative equivalents: bulb minutes and laptop hours based on total energy in Wh
+  const eqBulbEl = document.getElementById('equiv-bulb-minutes');
+  const eqLaptopEl = document.getElementById('equiv-laptop-hours');
+  if (eqBulbEl) {
+    const bulbMin = totalEnergy * 6; // 1 Wh corresponds to 6 minutes at 10W
+    eqBulbEl.textContent = bulbMin.toFixed(0);
+  }
+  if (eqLaptopEl) {
+    const lapHours = totalEnergy / 35; // average laptop uses 35 Wh per hour
+    eqLaptopEl.textContent = lapHours.toFixed(1);
+  }
 }
 /******/ })()
 ;

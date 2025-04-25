@@ -10,7 +10,8 @@
     "minimum_chrome_version": "88",
     "permissions": [
         "webNavigation",
-        "storage"
+        "storage",
+        "tabs"
     ],
     "host_permissions": [
         "https://chattometer.onrender.com/*"
