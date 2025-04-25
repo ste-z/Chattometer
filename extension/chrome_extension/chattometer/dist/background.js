@@ -60,6 +60,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 console.log("Chattometer background script loaded");
 
+// Listen for SPA navigation events and notify content scripts to reinitialize
+chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
+  chrome.tabs.sendMessage(details.tabId, { action: 'reinitializeChattometer' }, () => {
+    if (chrome.runtime.lastError) {
+      console.warn('Error sending reinit message to content script:', chrome.runtime.lastError.message);
+    }
+  });
+});
+
 /******/ })()
 ;
 //# sourceMappingURL=background.js.map

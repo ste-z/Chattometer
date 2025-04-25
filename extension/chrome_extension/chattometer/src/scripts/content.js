@@ -16,8 +16,8 @@ function ensureBadgeExists() {
     }
 
     // Badge doesn't exist, try to create it
-    const bottomBox = document.querySelector("div#thread-bottom-container"); // Specific to some UIs like Gemini
-    // TODO: Add selectors for other platforms (ChatGPT, Claude, etc.)
+    const bottomBox = document.querySelector("div#thread-bottom-container"); 
+    // TODO: Add selectors for other platforms (Claude, etc.)
     if (bottomBox) {
         badge = document.createElement("div");
         badge.id = BADGE_ID; // Assign the unique ID
@@ -58,7 +58,7 @@ async function findAndLogResponses() {
     }
 
     let responses = document.querySelectorAll("div.agent-turn"); // TODO: adjust per platform
-    // TODO: Add selectors for other platforms
+        // TODO: Add selectors for other platforms
     const modelElement = document.querySelector('button[data-testid="model-switcher-dropdown-button"] span'); // TODO
     // TODO: Add selectors for other platforms
     const modelName = modelElement ? modelElement.textContent.trim() : 'unknown'; // Get model name
@@ -89,6 +89,16 @@ async function findAndLogResponses() {
             if (badge && !badge.textContent.startsWith('Error')) {
                 badge.textContent = 'Calculating...';
             }
+            // --- Check if runtime context is still valid ---
+            if (!chrome.runtime?.id) {
+                console.error("Extension context invalidated. Cannot send message.");
+                // Optionally update the badge to indicate an issue
+                if (badge && !badge.textContent.startsWith('Error')) {
+                    badge.textContent = 'Error: Extension context lost';
+                }
+                return; // Stop execution if context is invalid
+            }
+            // --- End context check ---
             chrome.runtime.sendMessage(
                 {
                     action: "calculateImpact",
@@ -178,12 +188,12 @@ const mutationCallback = function(mutationsList, obs) {
     console.log("MutationObserver callback triggered."); // Log observer trigger
     // Check if the badge anchor still exists before running calculations
     const bottomBox = document.querySelector("div#thread-bottom-container"); // Re-check anchor
-    if (bottomBox) {
+        if (bottomBox) {
         // --- Add a small delay to allow DOM to settle ---
         setTimeout(() => {
             // Re-check anchor inside timeout in case it disappeared during the delay
             const currentBottomBox = document.querySelector("div#thread-bottom-container");
-            if (!currentBottomBox) {
+                        if (!currentBottomBox) {
                 console.log("Anchor disappeared during mutation callback delay.");
                 return;
             }
@@ -226,7 +236,7 @@ function setupObservers() {
 
     let observedSomething = false;
 
-    // Target 1: Response container (Specific: #thread > div:nth-child(1) > div:nth-child(2)) - Example for Gemini
+    // Target 1: Response container 
     // TODO: Add selectors for other platforms
     const specificResponseContainer = document.querySelector("#thread > div:nth-child(1) > div:nth-child(2)");
 
@@ -237,7 +247,7 @@ function setupObservers() {
     } else {
         console.warn("Specific response container (#thread > div:nth-child(1) > div:nth-child(2)) not found. Observation might be less targeted.");
         // Fallback: Observe a broader container if specific one isn't found, or rely on body observation later
-        const genericResponseContainer = document.querySelector('div[class*="react-scroll-to-bottom"] > div'); // Common in ChatGPT
+        const genericResponseContainer = document.querySelector('div[class*="react-scroll-to-bottom"] > div'); 
         if (genericResponseContainer && genericResponseContainer !== document.body) {
             console.log("Observing generic response container:", genericResponseContainer);
             observer.observe(genericResponseContainer, { childList: true, subtree: true });
@@ -332,14 +342,27 @@ window.addEventListener('replacestate', () => {
     scheduleInitialization();
 });
 
+// Listen for generic SPA navigation event
+window.addEventListener('locationchange', () => {
+    console.log("locationchange intercepted.");
+    scheduleInitialization();
+});
+
 // --- Initial Load ---
 
-// Use DOMContentLoaded for potentially faster initial load than window.load
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => scheduleInitialization(1000)); // Add slight delay even on DOMContentLoaded
 } else {
     // If DOMContentLoaded has already fired
-    scheduleInitialization(1500); // Use the original longer delay if loaded later
+    scheduleInitialization(1500);
 }
 
 console.log("Chattometer content script loaded.");
+
+// Listen for reinitialization requests from background script
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'reinitializeChattometer') {
+    console.log('Received reinit message. Reinitializing Chattometer...');
+    scheduleInitialization();
+  }
+});
