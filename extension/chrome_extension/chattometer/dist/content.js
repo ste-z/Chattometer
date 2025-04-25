@@ -550,6 +550,10 @@ var __webpack_exports__ = {};
   !*** ./src/scripts/content.js ***!
   \********************************/
 __webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   ensureBadgeExists: () => (/* binding */ ensureBadgeExists),
+/* harmony export */   updateBadge: () => (/* binding */ updateBadge)
+/* harmony export */ });
 /* harmony import */ var js_tiktoken_lite__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! js-tiktoken/lite */ "./node_modules/js-tiktoken/dist/lite.js");
 /* harmony import */ var js_tiktoken_ranks_o200k_base__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! js-tiktoken/ranks/o200k_base */ "./node_modules/js-tiktoken/dist/ranks/o200k_base.js");
 
@@ -953,12 +957,17 @@ if (document.readyState === 'loading') {
 console.log("Chattometer content script loaded.");
 
 // Listen for reinitialization requests from background script
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'reinitializeChattometer') {
-    console.log('Received reinit message. Reinitializing Chattometer...');
-    scheduleInitialization();
-  }
-});
+if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'reinitializeChattometer') {
+      console.log('Received reinit message. Reinitializing Chattometer...');
+      scheduleInitialization();
+    }
+  });
+}
+
+// Export functions for unit testing
+
 
 })();
 

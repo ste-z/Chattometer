@@ -399,9 +399,14 @@ if (document.readyState === 'loading') {
 console.log("Chattometer content script loaded.");
 
 // Listen for reinitialization requests from background script
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'reinitializeChattometer') {
-    console.log('Received reinit message. Reinitializing Chattometer...');
-    scheduleInitialization();
-  }
-});
+if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'reinitializeChattometer') {
+      console.log('Received reinit message. Reinitializing Chattometer...');
+      scheduleInitialization();
+    }
+  });
+}
+
+// Export functions for unit testing
+export { ensureBadgeExists, updateBadge };
