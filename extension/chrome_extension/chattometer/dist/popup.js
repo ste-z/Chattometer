@@ -1,3 +1,7 @@
+/******/ (() => { // webpackBootstrap
+/*!****************************!*\
+  !*** ./src/popup/popup.js ***!
+  \****************************/
 // Helper to render data into the popup
 function renderPopup(data, req) {
   // Update date
@@ -35,3 +39,6 @@ chrome.storage.onChanged.addListener((changes, area) => {
     });
   }
 });
+/******/ })()
+;
+//# sourceMappingURL=popup.js.map

@@ -41,6 +41,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     .then(data => {
       // --- Log successful data from backend ---
       console.log("Received successful data from backend:", JSON.stringify(data, null, 2));
+      // Store impact data and request info for popup
+      chrome.storage.local.set({
+        lastImpactData: data,
+        lastRequest: { model: request.modelName, tokens: request.tokens, timestamp: Date.now() }
+      }, () => {
+        console.log('Saved impact data and request to storage');
+      });
       // Send the successful data back to the content script
       console.log("Sending success response to content script.");
       sendResponse({ success: true, data: data });
