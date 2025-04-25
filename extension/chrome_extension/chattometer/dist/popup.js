@@ -80,11 +80,6 @@ chrome.storage.onChanged.addListener((changes, area) => {
           const cum = result.cumulativeRequests || {};
           const data = impactMap[chatKey];
           const req = reqMap[chatKey];
-          if (data && req) {
-            renderPopup(data, req);
-          } else {
-            clearPopup();
-          }
           updateCumulative(cum);
         });
       });
