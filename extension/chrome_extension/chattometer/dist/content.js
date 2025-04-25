@@ -720,9 +720,9 @@ function updateBadge(impactData) {
     }
 
     if (impactData?.impacts?.energy_kWh?.min !== undefined && impactData?.impacts?.energy_kWh?.max !== undefined && impactData?.impacts?.gwp_kgCO2eq?.min !== undefined && impactData?.impacts?.gwp_kgCO2eq?.max !== undefined) {
-        const avgEnergy = (impactData.impacts.energy_kWh.min + impactData.impacts.energy_kWh.max) / 2;
-        const avgGhg = (impactData.impacts.gwp_kgCO2eq.min + impactData.impacts.gwp_kgCO2eq.max) / 2;
-        const badgeText = `Energy: ${avgEnergy.toFixed(4)} kWh<br>GHG: ${avgGhg.toFixed(4)} kgCO2eq`;
+        const avgEnergy = 1000 * (impactData.impacts.energy_kWh.min + impactData.impacts.energy_kWh.max) / 2;
+        const avgGhg = 1000 * (impactData.impacts.gwp_kgCO2eq.min + impactData.impacts.gwp_kgCO2eq.max) / 2;
+        const badgeText = `Energy: ${avgEnergy.toFixed(1)} Wh<br>GHG: ${avgGhg.toFixed(1)} gCO2eq`;
         console.log("Setting badge innerHTML:", badgeText);
         // Use innerHTML carefully, ensure data is sanitized if it came from external source
         currentBadge.innerHTML = badgeText;
