@@ -83,27 +83,56 @@ async function findAndLogResponses() {
         console.log(`Preparing to send to background: model='${modelName}', tokens=${nTokensCombinedText}, responses found=${responses.length}`);
 
         // --- Send message to background script ---
-        // FIXME: Currently only combined impact is calculated. Also implement last response impact calculation
-        if (nTokensCombinedText > 0 && modelName !== 'unknown') {
-            // Avoid showing "Calculating..." if an error is already displayed
-            if (badge && !badge.textContent.startsWith('Error')) {
-                badge.textContent = 'Calculating...';
+        const urlObj = new URL(window.location.href);
+        const chatKey = `${urlObj.origin}${urlObj.pathname}`;
+        chrome.storage.local.get(['processedTokens', 'lastImpactDataMap', 'lastRequestMap'], (result) => {
+            const tokensMapStored = result.processedTokens || {};
+            const impactMap = result.lastImpactDataMap || {};
+            const reqMap = result.lastRequestMap || {};
+            const lastData = impactMap[chatKey];
+            const lastReq = reqMap[chatKey];
+            // Seed processedTokens for this chatKey from lastRequest if missing
+            if (!(chatKey in tokensMapStored) && lastReq && (() => {
+                try {
+                    const prev = new URL(lastReq.url);
+                    return `${prev.origin}${prev.pathname}` === chatKey;
+                } catch { return false; }
+            })()) {
+                tokensMapStored[chatKey] = lastReq.tokens;
+                // Persist initial processedTokens map to storage
+                chrome.storage.local.set({ processedTokens: tokensMapStored });
             }
-            // --- Check if runtime context is still valid ---
-            if (!chrome.runtime?.id) {
-                console.error("Extension context invalidated. Cannot send message.");
-                // Optionally update the badge to indicate an issue
-                if (badge && !badge.textContent.startsWith('Error')) {
-                    badge.textContent = 'Error: Extension context lost';
+            const lastProcessedTokens = tokensMapStored[chatKey] || 0;
+            if (nTokensCombinedText <= lastProcessedTokens) {
+                console.log("No new tokens since last processed. Rendering cached impact data.");
+                // Only render if the cached data corresponds to this chat
+                if (lastReq) {
+                    try {
+                        const prevUrl = new URL(lastReq.url);
+                        const prevKey = `${prevUrl.origin}${prevUrl.pathname}`;
+                        if (prevKey === chatKey && lastData) {
+                            updateBadge(lastData);
+                        } else if (badge) {
+                            badge.textContent = '';
+                        }
+                    } catch {
+                        if (badge) badge.textContent = '';
+                    }
+                } else if (badge) {
+                    badge.textContent = '';
                 }
-                return; // Stop execution if context is invalid
+                return;
             }
-            // --- End context check ---
+            // New tokens: show calculating and send request
+            if (badge) badge.textContent = 'Calculating...';
+            const requestTimestamp = Date.now();
             chrome.runtime.sendMessage(
                 {
                     action: "calculateImpact",
-                    modelName: modelName, // Send model name
-                    tokens: nTokensCombinedText
+                    modelName: modelName,
+                    tokens: nTokensCombinedText,
+                    url: window.location.href,
+                    timestamp: requestTimestamp
                 },
                 (response) => {
                     // --- Log response received ---
@@ -137,13 +166,7 @@ async function findAndLogResponses() {
                     }
                 }
             );
-        } else if (badge) {
-            // If no tokens or unknown model, clear or set default text
-            console.log(`Skipping calculation: tokens=${nTokensCombinedText}, model='${modelName}'`);
-            if (!badge.textContent.startsWith('Error')) { // Don't clear error messages
-                badge.textContent = ''; // Or 'Enter text to calculate'
-            }
-        }
+        });
         // --- End message sending ---
     } else if (badge) {
         console.log("No responses found (responses.length === 0). Clearing badge.");
@@ -286,10 +309,26 @@ function initializeChattometer() {
     console.log("Initializing Chattometer...");
     // 1. Ensure the badge exists or can be created
     if (ensureBadgeExists()) {
-        // 2. Run the calculation logic immediately if badge is ready
-        findAndLogResponses();
-        // 3. Set up observers to watch for changes
-        setupObservers();
+        // Immediately render cached impact data if available
+        const urlObjInit = new URL(window.location.href);
+        const initChatKey = `${urlObjInit.origin}${urlObjInit.pathname}`;
+        chrome.storage.local.get(['lastImpactDataMap', 'lastRequestMap'], (initResult) => {
+            const impactMapInit = initResult.lastImpactDataMap || {};
+            const reqMapInit = initResult.lastRequestMap || {};
+            const lastDataInit = impactMapInit[initChatKey];
+            const lastReqInit = reqMapInit[initChatKey];
+            if (lastDataInit && lastReqInit) {
+                try {
+                    const prevInit = new URL(lastReqInit.url);
+                    if (`${prevInit.origin}${prevInit.pathname}` === initChatKey) {
+                        updateBadge(lastDataInit);
+                    }
+                } catch {}
+            }
+            // Proceed with normal logic
+            findAndLogResponses();
+            setupObservers();
+        });
     } else {
         // If badge couldn't be created (anchor not found), schedule another attempt
         console.log("Badge anchor not found. Retrying initialization soon...");

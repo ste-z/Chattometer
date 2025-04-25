@@ -37,16 +37,55 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     .then(data => {
       // --- Log successful data from backend ---
       console.log("Received successful data from backend:", JSON.stringify(data, null, 2));
-      // Store impact data and request info for popup
-      chrome.storage.local.set({
-        lastImpactData: data,
-        lastRequest: { model: request.modelName, tokens: request.tokens, timestamp: Date.now() }
-      }, () => {
-        console.log('Saved impact data and request to storage');
+      // --- Compute average impacts for cumulative tracking ---
+      const avgEnergyWh = ((data.impacts.energy_kWh.min + data.impacts.energy_kWh.max) / 2) * 1000;
+      const avgGhgG = ((data.impacts.gwp_kgCO2eq.min + data.impacts.gwp_kgCO2eq.max) / 2) * 1000;
+      // Update cumulative impacts only for new tokens since last processed count
+      chrome.storage.local.get(['cumulativeRequests', 'processedTokens'], (result) => {
+        const cum = result.cumulativeRequests || {};
+        const tokensMap = result.processedTokens || {};
+        // Create a consistent key by using origin + pathname (ignore search/hash)
+        const urlObj = new URL(request.url);
+        const chatKey = `${urlObj.origin}${urlObj.pathname}`;  
+        // Initialize cumulative entry with tokens and timestamp
+        if (!cum[chatKey]) {
+          cum[chatKey] = {
+            energyWh: 0,
+            ghgG: 0,
+            tokens: 0,
+            timestamp: new Date(request.timestamp).toISOString()
+          };
+        }
+        const lastTokens = tokensMap[chatKey] || 0;
+        const newTokens = request.tokens;
+        const deltaTokens = newTokens - lastTokens;
+        if (deltaTokens > 0) {
+          const energyPerToken = avgEnergyWh / newTokens;
+          const ghgPerToken = avgGhgG / newTokens;
+          cum[chatKey].energyWh += energyPerToken * deltaTokens;
+          cum[chatKey].ghgG += ghgPerToken * deltaTokens;
+          // Update cumulative tokens
+          cum[chatKey].tokens = newTokens;
+          tokensMap[chatKey] = newTokens;
+        }
+        chrome.storage.local.set({ cumulativeRequests: cum, processedTokens: tokensMap });
       });
-      // Send the successful data back to the content script
-      console.log("Sending success response to content script.");
-      sendResponse({ success: true, data: data });
+
+      // Store impact data and request info for popup
+      chrome.storage.local.get(['lastImpactDataMap', 'lastRequestMap'], (maps) => {
+        const impactMap = maps.lastImpactDataMap || {};
+        const reqMap = maps.lastRequestMap || {};
+        const urlObj = new URL(request.url);
+        const chatKey = `${urlObj.origin}${urlObj.pathname}`;
+        // Update maps for this chat
+        impactMap[chatKey] = data;
+        reqMap[chatKey] = { model: request.modelName, tokens: request.tokens, timestamp: request.timestamp, url: request.url };
+        // Persist maps
+        chrome.storage.local.set({ lastImpactDataMap: impactMap, lastRequestMap: reqMap }, () => {
+          console.log('Saved impact data map and request map to storage');
+          sendResponse({ success: true, data: data });
+        });
+      });
     })
     .catch(error => {
       // --- Log fetch/processing error ---

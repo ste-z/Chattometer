@@ -52,6 +52,14 @@
                 "name": "popup",
                 "src": "./src/popup/popup.js"
             }
+        ],
+        "scss_bundles": [
+            {
+              "src": [
+                "./src/popup/popup.scss"
+              ],
+              "name": "styles"
+            }
         ]
     },
     "dependencies": {
