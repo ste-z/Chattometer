@@ -17,14 +17,14 @@
         "https://chattometer.onrender.com/*"
     ],
     "icons": {
-      "128": "assets/img/icons/icon-128.png"
+      "128": "assets/img/icons/1-128.png"
     },
     "action": {
         "default_popup": "default_popup.html",
         "default_icon": {
-            "16": "assets/img/icons/icon-16.png",
-            "32": "assets/img/icons/icon-32.png",
-            "48": "assets/img/icons/icon-48.png"}
+            "16": "assets/img/icons/1-16.png",
+            "32": "assets/img/icons/1-32.png",
+            "48": "assets/img/icons/1-48.png"}
     },
     "content_scripts": [
         {
