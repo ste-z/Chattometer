@@ -19,7 +19,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 
     // Perform the fetch request
-    // FIXME: the current endpoint is a local Flask server running on port 5000, use actual endpoint in production
     fetch('https://chattometer.onrender.com/calculate', {
       method: 'POST',
       headers: {
