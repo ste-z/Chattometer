@@ -575,20 +575,57 @@ function ensureBadgeExists() {
 
     // Badge doesn't exist, try to create it
     const bottomBox = document.querySelector("div#thread-bottom-container"); 
-    // TODO: Add selectors for other platforms (Claude, etc.)
     if (bottomBox) {
         badge = document.createElement("div");
         badge.id = BADGE_ID; // Assign the unique ID
         bottomBox.insertAdjacentElement("beforebegin", badge); // Insert before the bottom box
         badge.classList.add("text-token-text-secondary", "text-xs", "font-semibold", "text-center");
-        // Add styles for blurred background
+
+        // Add styles for the badge
         badge.style.backgroundColor = "rgba(255, 255, 255, 0.7)"; // Semi-transparent white background
         badge.style.backdropFilter = "blur(4px)"; // Apply blur effect
         badge.style.webkitBackdropFilter = "blur(4px)"; // For Safari compatibility
-        badge.style.padding = "2px 8px"; // Add some padding
+        badge.style.padding = "10px"; // Add padding for larger height
         badge.style.marginTop = "4px"; // Add some margin
         badge.style.marginBottom = "4px"; // Add some margin
-        console.log("Chattometer badge created.");
+        badge.style.display = "flex"; // Use flexbox for alignment
+        badge.style.alignItems = "center"; // Center items vertically
+        badge.style.justifyContent = "center"; // Center items horizontally
+        badge.style.height = "150px"; // Increase height to fit the icon and text
+
+        // Add a container for the text
+        const textContainer = document.createElement("div");
+        textContainer.id = `${BADGE_ID}-text`;
+        textContainer.style.display = "flex";
+        textContainer.style.flexDirection = "column";
+        textContainer.style.justifyContent = "center";
+        textContainer.style.alignItems = "center"; // Center text horizontally
+        textContainer.style.textAlign = "center"; // Center text alignment
+
+        // Add the image to the badge
+        const icon = document.createElement("img");
+        icon.src = chrome.runtime.getURL("assets/img/icons/1-128.png"); // Use chrome.runtime.getURL to get the correct path
+        icon.alt = "Impact Icon";
+        icon.style.width = "128px"; // Adjust the size of the icon
+        icon.style.height = "128px";
+        icon.style.marginLeft = "8px"; // Add spacing between the text and the icon
+        icon.style.verticalAlign = "middle"; // Align the icon with the text
+
+        // Wrap the text and icon in a container to center them together
+        const contentWrapper = document.createElement("div");
+        contentWrapper.style.display = "flex";
+        contentWrapper.style.alignItems = "center"; // Center items vertically
+        contentWrapper.style.justifyContent = "center"; // Center items horizontally
+        contentWrapper.style.gap = "10px"; // Add spacing between text and icon
+
+        // Append the text container and icon to the wrapper
+        contentWrapper.appendChild(textContainer);
+        contentWrapper.appendChild(icon);
+
+        // Append the wrapper to the badge
+        badge.appendChild(contentWrapper);
+
+        console.log("Chattometer badge created with centered text and icon.");
         return true; // Badge created
     } else {
         // If bottomBox isn't found yet, return false
@@ -746,19 +783,23 @@ function updateBadge(impactData) {
         return; // Exit if badge doesn't exist anymore
     }
 
+    const textContainer = document.getElementById(`${BADGE_ID}-text`);
+    if (!textContainer) {
+        console.log("Text container not found in badge.");
+        return; // Exit if text container doesn't exist
+    }
+
     if (impactData?.impacts?.energy_kWh?.min !== undefined && impactData?.impacts?.energy_kWh?.max !== undefined && impactData?.impacts?.gwp_kgCO2eq?.min !== undefined && impactData?.impacts?.gwp_kgCO2eq?.max !== undefined) {
         const avgEnergy = 1000 * (impactData.impacts.energy_kWh.min + impactData.impacts.energy_kWh.max) / 2;
         const avgGhg = 1000 * (impactData.impacts.gwp_kgCO2eq.min + impactData.impacts.gwp_kgCO2eq.max) / 2;
         const badgeText = `Energy: ${avgEnergy.toFixed(1)} Wh<br>GHG: ${avgGhg.toFixed(1)} gCO2eq`;
-        console.log("Setting badge innerHTML:", badgeText);
+        console.log("Setting badge text:", badgeText);
         // Use innerHTML carefully, ensure data is sanitized if it came from external source
-        currentBadge.innerHTML = badgeText;
+        textContainer.innerHTML = badgeText;
     } else {
         // Handle cases where data structure is unexpected or calculation failed previously
         console.log("Impact data structure invalid or missing. Setting badge text to 'Impact data unavailable'.");
-        if (!currentBadge.textContent.startsWith('Error')) { // Avoid overwriting specific error messages
-            currentBadge.textContent = 'Impact data unavailable';
-        }
+        textContainer.textContent = 'Impact data unavailable';
     }
 }
 
@@ -865,7 +906,7 @@ function setupObservers() {
 
 function initializeChattometer() {
     console.log("Initializing Chattometer...");
-    // 1. Ensure the badge exists or can be created
+    // Ensure the badge exists or can be created
     if (ensureBadgeExists()) {
         // Immediately render cached impact data if available
         const urlObjInit = new URL(window.location.href);
