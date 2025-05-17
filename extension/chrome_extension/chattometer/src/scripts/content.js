@@ -34,13 +34,9 @@ function ensureBadgeExists() {
         badge.style.backgroundColor = "rgba(255, 255, 255, 0.7)"; // Semi-transparent white background
         badge.style.backdropFilter = "blur(4px)"; // Apply blur effect
         badge.style.webkitBackdropFilter = "blur(4px)"; // For Safari compatibility
-        badge.style.padding = "10px"; // Add padding for larger height
-        badge.style.marginTop = "4px"; // Add some margin
-        badge.style.marginBottom = "4px"; // Add some margin
         badge.style.display = "flex"; // Use flexbox for alignment
         badge.style.alignItems = "center"; // Center items vertically
         badge.style.justifyContent = "center"; // Center items horizontally
-        badge.style.height = "150px"; // Increase height to fit the icon and text
 
         // Add a container for the text
         const textContainer = document.createElement("div");
@@ -48,6 +44,7 @@ function ensureBadgeExists() {
         textContainer.style.display = "flex";
         textContainer.style.flexDirection = "column";
         textContainer.style.justifyContent = "center";
+        textContainer.style.padding = "10px"; // Add padding
         textContainer.style.alignItems = "center"; // Center text horizontally
         textContainer.style.textAlign = "center"; // Center text alignment
 
@@ -105,8 +102,8 @@ function ensureBadgeExists() {
         floatingIcon.style.position = "fixed";
         floatingIcon.style.bottom = "20px";
         floatingIcon.style.right = "20px";
-        floatingIcon.style.width = "128px";
-        floatingIcon.style.height = "128px";
+        floatingIcon.style.width = "100px";
+        floatingIcon.style.height = "100px";
         floatingIcon.style.cursor = "pointer";
         floatingIcon.style.zIndex = "1000";
 
@@ -133,10 +130,10 @@ function ensureBadgeExists() {
         function adjustBuddyPosition() {
             console.log("Adjusting buddy position based on window size.");
             const shouldBump = window.innerWidth < 1180;
-            floatingIcon.style.bottom = shouldBump ? '170px' : '20px';
+            floatingIcon.style.bottom = shouldBump ? '150px' : '20px';
             floatingIcon.style.width = shouldBump ? "64px" : "100px";
             floatingIcon.style.height = shouldBump ? "64px" : "100px";
-            modal.style.bottom = shouldBump ? '250px' : '160px';
+            modal.style.bottom = shouldBump ? '230px' : '160px';
         }
         window.addEventListener('resize', adjustBuddyPosition);
         adjustBuddyPosition();
