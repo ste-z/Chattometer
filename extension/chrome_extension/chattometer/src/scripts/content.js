@@ -12,7 +12,14 @@ function ensureBadgeExists() {
     let existingBadge = document.getElementById(BADGE_ID);
     if (existingBadge) {
         badge = existingBadge; // Update global reference
-        return true; // Badge exists
+        // Ensure the text container exists; if not, remove incomplete badge to recreate
+        if (!document.getElementById(`${BADGE_ID}-text`)) {
+            console.warn('Existing badge missing text container; recreating badge');
+            badge.remove();
+            badge = null;
+        } else {
+            return true; // Badge fully exists
+        }
     }
 
     // Badge doesn't exist, try to create it
@@ -44,19 +51,10 @@ function ensureBadgeExists() {
         textContainer.style.alignItems = "center"; // Center text horizontally
         textContainer.style.textAlign = "center"; // Center text alignment
 
-        // Add the image to the badge
-        const icon = document.createElement("img");
-        icon.src = chrome.runtime.getURL("assets/img/icons/1-128.png"); // Use chrome.runtime.getURL to get the correct path
-        icon.alt = "Impact Icon";
-        icon.style.width = "128px"; // Adjust the size of the icon
-        icon.style.height = "128px";
-        icon.style.marginLeft = "8px"; // Add spacing between the text and the icon
-        icon.style.cursor = "pointer"; // Make the icon look clickable
-
         // Create the modal
         const modal = document.createElement("div");
         modal.id = `${BADGE_ID}-modal`;
-        modal.style.position = "absolute";
+        modal.style.position = "fixed"; // changed from absolute to fixed so positioning relative to viewport
         modal.style.backgroundColor = "#3e7863"; // Match the popup background color
         modal.style.color = "#ffffff"; // Match the text color
         modal.style.borderRadius = "12px"; // Match the border radius
@@ -66,6 +64,8 @@ function ensureBadgeExists() {
         modal.style.zIndex = "1000";
         modal.style.width = "320px"; // Match the popup width
         modal.style.fontFamily = "Arial, sans-serif"; // Match the font family
+        modal.style.bottom = "160px"; // position modal above the floating icon
+        modal.style.right = "20px"; // align modal horizontally with icon
 
         // Set the modal's content to match the popup structure
         modal.innerHTML = `
@@ -84,44 +84,62 @@ function ensureBadgeExists() {
             </div>
         `;
 
-        // Add click event to the icon to toggle the modal and update its content
-        icon.addEventListener("click", (event) => {
-            // Update the modal with the latest data
-            updateModalOnIconClick();
-
-            // Toggle the modal's visibility
-            const rect = icon.getBoundingClientRect();
-            const modalHeight = modal.offsetHeight || 0; // Get the modal's height (fallback to 0 if not rendered yet)
-            modal.style.top = `${rect.top - modalHeight}px`; // Align the bottom of the modal with the bottom of the icon
-            modal.style.left = `${rect.right + window.scrollX + 8}px`; // Position to the right of the icon
-            modal.style.display = modal.style.display === "none" ? "block" : "none"; // Toggle visibility
-        });
-
-        // Add click event to close the modal when clicking outside
-        document.addEventListener("click", (event) => {
-            if (!modal.contains(event.target) && event.target !== icon) {
-                modal.style.display = "none";
-            }
-        });
-
-        // Wrap the text and icon in a container to center them together
+        // Wrap the text container in a wrapper without the icon
         const contentWrapper = document.createElement("div");
         contentWrapper.style.display = "flex";
         contentWrapper.style.alignItems = "center"; // Center items vertically
         contentWrapper.style.justifyContent = "center"; // Center items horizontally
-        contentWrapper.style.gap = "10px"; // Add spacing between text and icon
+        contentWrapper.style.gap = "10px"; // Add spacing between elements
 
-        // Append the text container and icon to the wrapper
+        // Only append the text container here
         contentWrapper.appendChild(textContainer);
-        contentWrapper.appendChild(icon);
 
         // Append the wrapper to the badge
         badge.appendChild(contentWrapper);
 
+        // Create a floating buddy icon that stays on bottom right
+        const floatingIcon = document.createElement("img");
+        floatingIcon.id = `${BADGE_ID}-floating-icon`;
+        floatingIcon.src = chrome.runtime.getURL("assets/img/icons/1-128.png");
+        floatingIcon.alt = "Impact Buddy";
+        floatingIcon.style.position = "fixed";
+        floatingIcon.style.bottom = "20px";
+        floatingIcon.style.right = "20px";
+        floatingIcon.style.width = "128px";
+        floatingIcon.style.height = "128px";
+        floatingIcon.style.cursor = "pointer";
+        floatingIcon.style.zIndex = "1000";
+
+        // Add click event to the floating icon to toggle the modal
+        floatingIcon.addEventListener("click", (event) => {
+            // Toggle modal visibility without resetting position
+            modal.style.display = modal.style.display === "none" ? "block" : "none";
+        });
+
+        // Add click event to close the modal when clicking outside
+        document.addEventListener("click", (event) => {
+            if (!modal.contains(event.target) && event.target !== floatingIcon) {
+                modal.style.display = "none";
+            }
+        });
+
         // Append the modal to the document body
         document.body.appendChild(modal);
 
-        console.log("Chattometer badge created with centered text, clickable icon, and modal.");
+        // Append the floating icon to the body
+        document.body.appendChild(floatingIcon);
+
+        // Adjust icon and modal positions based on window size
+        function adjustBuddyPosition() {
+            console.log("Adjusting buddy position based on window size.");
+            const shouldBump = window.innerWidth < 1180;
+            floatingIcon.style.bottom = shouldBump ? '170px' : '20px';
+            floatingIcon.style.width = shouldBump ? "64px" : "100px";
+            floatingIcon.style.height = shouldBump ? "64px" : "100px";
+            modal.style.bottom = shouldBump ? '250px' : '160px';
+        }
+        window.addEventListener('resize', adjustBuddyPosition);
+        adjustBuddyPosition();
 
         // Fetch and update the badge with the latest data
         chrome.storage.local.get(['lastImpactDataMap', 'lastRequestMap'], (result) => {
@@ -306,11 +324,6 @@ function updateBadge(impactData) {
         console.log("Impact data structure invalid or missing. Setting badge text to 'Impact data unavailable'.");
         textContainer.textContent = 'Impact data unavailable';
     }
-}
-
-// --- Function to update the modal on icon click ---
-function updateModalOnIconClick() {
-    console.log("Icon clicked. No modal updates are performed.");
 }
 
 // --- MutationObserver Setup ---
@@ -515,6 +528,15 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
     }
   });
 }
+
+// Add global unhandledrejection handler to suppress context invalidation errors
+window.addEventListener('unhandledrejection', (event) => {
+    const message = event.reason && (event.reason.message || event.reason);
+    if (typeof message === 'string' && message.includes('Extension context invalidated')) {
+        console.warn('Suppressed unhandled rejection:', message);
+        event.preventDefault();
+    }
+});
 
 // Export functions for unit testing
 export { ensureBadgeExists, updateBadge };
