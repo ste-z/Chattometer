@@ -609,7 +609,58 @@ function ensureBadgeExists() {
         icon.style.width = "128px"; // Adjust the size of the icon
         icon.style.height = "128px";
         icon.style.marginLeft = "8px"; // Add spacing between the text and the icon
-        icon.style.verticalAlign = "middle"; // Align the icon with the text
+        icon.style.cursor = "pointer"; // Make the icon look clickable
+
+        // Create the modal
+        const modal = document.createElement("div");
+        modal.id = `${BADGE_ID}-modal`;
+        modal.style.position = "absolute";
+        modal.style.backgroundColor = "#3e7863"; // Match the popup background color
+        modal.style.color = "#ffffff"; // Match the text color
+        modal.style.borderRadius = "12px"; // Match the border radius
+        modal.style.boxShadow = "0 4px 8px rgba(0, 0, 0, 0.2)";
+        modal.style.padding = "20px"; // Match the padding
+        modal.style.display = "none"; // Initially hidden
+        modal.style.zIndex = "1000";
+        modal.style.width = "320px"; // Match the popup width
+        modal.style.fontFamily = "Arial, sans-serif"; // Match the font family
+
+        // Set the modal's content to match the popup structure
+        modal.innerHTML = `
+            <div class="dashboard">
+                <h2 style="margin-top: 0; font-size: 1.5em;">Cooper</h2>
+                <div class="character-info" style="display: flex; align-items: center; margin-bottom: 20px;">
+                    <div class="character" style="margin-right: 15px; margin-top: 10px; background-color: #ffffff; border-radius: 8px; padding: 10px;">
+                        <img src="${chrome.runtime.getURL("assets/img/icons/1-128.png")}" alt="Energy Buddy" style="width: 100px; height: auto;">
+                    </div>
+                    <div class="info" style="font-size: 0.95em; line-height: 1.6;">
+                        <div><strong>Age</strong>: 2</div>
+                        <div><strong>Hobby</strong>: Energy Saving</div>
+                        <div><strong>Favorite Food</strong>: Energy-efficient meals</div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Add click event to the icon to toggle the modal and update its content
+        icon.addEventListener("click", (event) => {
+            // Update the modal with the latest data
+            updateModalOnIconClick();
+
+            // Toggle the modal's visibility
+            const rect = icon.getBoundingClientRect();
+            const modalHeight = modal.offsetHeight || 0; // Get the modal's height (fallback to 0 if not rendered yet)
+            modal.style.top = `${rect.top - modalHeight}px`; // Align the bottom of the modal with the bottom of the icon
+            modal.style.left = `${rect.right + window.scrollX + 8}px`; // Position to the right of the icon
+            modal.style.display = modal.style.display === "none" ? "block" : "none"; // Toggle visibility
+        });
+
+        // Add click event to close the modal when clicking outside
+        document.addEventListener("click", (event) => {
+            if (!modal.contains(event.target) && event.target !== icon) {
+                modal.style.display = "none";
+            }
+        });
 
         // Wrap the text and icon in a container to center them together
         const contentWrapper = document.createElement("div");
@@ -625,7 +676,22 @@ function ensureBadgeExists() {
         // Append the wrapper to the badge
         badge.appendChild(contentWrapper);
 
-        console.log("Chattometer badge created with centered text and icon.");
+        // Append the modal to the document body
+        document.body.appendChild(modal);
+
+        console.log("Chattometer badge created with centered text, clickable icon, and modal.");
+
+        // Fetch and update the badge with the latest data
+        chrome.storage.local.get(['lastImpactDataMap', 'lastRequestMap'], (result) => {
+            const urlObj = new URL(window.location.href);
+            const chatKey = `${urlObj.origin}${urlObj.pathname}`;
+            const impactMap = result.lastImpactDataMap || {};
+            const lastData = impactMap[chatKey];
+            if (lastData) {
+                updateBadge(lastData); // Update badge with the latest data
+            }
+        });
+
         return true; // Badge created
     } else {
         // If bottomBox isn't found yet, return false
@@ -638,6 +704,7 @@ function ensureBadgeExists() {
 // FIXME: use different logic for different URL (different chat platforms)
 async function findAndLogResponses() {
     console.log("findAndLogResponses triggered."); // Log function start
+
     // --- Try to find or create and insert the badge ---
     if (!ensureBadgeExists()) {
         console.log("Badge anchor not found in findAndLogResponses, exiting.");
@@ -718,6 +785,7 @@ async function findAndLogResponses() {
                 }
                 return;
             }
+
             // New tokens: show calculating and send request
             if (badge) badge.textContent = 'Calculating...';
             const requestTimestamp = Date.now();
@@ -751,10 +819,8 @@ async function findAndLogResponses() {
                     if (response && response.success) {
                         const impactData = response.data;
                         console.log('Estimated Impact (from background):', impactData);
-                        // Update badge with received data
-                        updateBadge(impactData); // Pass currentBadge reference if needed, or let updateBadge find it
+                        updateBadge(impactData); // Update badge with received data
                     } else {
-                        // Handle errors reported by the background script
                         const errorMsg = response ? response.error : 'Unknown error';
                         console.error('Error fetching impact calculation (from background):', errorMsg);
                         currentBadge.textContent = `Error: ${errorMsg}`; // Show specific error in badge
@@ -762,10 +828,9 @@ async function findAndLogResponses() {
                 }
             );
         });
-        // --- End message sending ---
     } else if (badge) {
         console.log("No responses found (responses.length === 0). Clearing badge.");
-        if (!badge.textContent.startsWith('Error')) { // Don't clear error messages
+        if (!badge.textContent.startsWith('Error')) {
             badge.textContent = ''; // Clear badge if no responses found
         }
     }
@@ -773,34 +838,37 @@ async function findAndLogResponses() {
 
 // --- Function to update the badge ---
 function updateBadge(impactData) {
-    // --- Log data received by updateBadge ---
     console.log("updateBadge received data:", JSON.stringify(impactData, null, 2));
 
-    // Re-check if badge exists in the DOM, as it might have been removed/recreated
     const currentBadge = document.getElementById(BADGE_ID);
     if (!currentBadge) {
         console.log("Badge not found when trying to update.");
-        return; // Exit if badge doesn't exist anymore
+        return;
     }
 
     const textContainer = document.getElementById(`${BADGE_ID}-text`);
     if (!textContainer) {
         console.log("Text container not found in badge.");
-        return; // Exit if text container doesn't exist
+        return;
     }
 
     if (impactData?.impacts?.energy_kWh?.min !== undefined && impactData?.impacts?.energy_kWh?.max !== undefined && impactData?.impacts?.gwp_kgCO2eq?.min !== undefined && impactData?.impacts?.gwp_kgCO2eq?.max !== undefined) {
         const avgEnergy = 1000 * (impactData.impacts.energy_kWh.min + impactData.impacts.energy_kWh.max) / 2;
         const avgGhg = 1000 * (impactData.impacts.gwp_kgCO2eq.min + impactData.impacts.gwp_kgCO2eq.max) / 2;
+
+        // Update the badge text
         const badgeText = `Energy: ${avgEnergy.toFixed(1)} Wh<br>GHG: ${avgGhg.toFixed(1)} gCO2eq`;
         console.log("Setting badge text:", badgeText);
-        // Use innerHTML carefully, ensure data is sanitized if it came from external source
         textContainer.innerHTML = badgeText;
     } else {
-        // Handle cases where data structure is unexpected or calculation failed previously
         console.log("Impact data structure invalid or missing. Setting badge text to 'Impact data unavailable'.");
         textContainer.textContent = 'Impact data unavailable';
     }
+}
+
+// --- Function to update the modal on icon click ---
+function updateModalOnIconClick() {
+    console.log("Icon clicked. No modal updates are performed.");
 }
 
 // --- MutationObserver Setup ---
@@ -924,14 +992,13 @@ function initializeChattometer() {
                     }
                 } catch {}
             }
-            // Proceed with normal logic
+            // Proceed with normal logic to fetch and update real-time data
             findAndLogResponses();
             setupObservers();
         });
     } else {
-        // If badge couldn't be created (anchor not found), schedule another attempt
         console.log("Badge anchor not found. Retrying initialization soon...");
-        scheduleInitialization(1000); // Try again in 1 second
+        scheduleInitialization(1000); // Retry in 1 second
     }
 }
 
